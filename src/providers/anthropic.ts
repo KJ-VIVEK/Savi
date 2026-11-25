@@ -27,8 +27,8 @@ export class AnthropicLLM implements LLM {
           input_schema: t.schema as Anthropic.Beta.BetaTool.InputSchema,
         })),
         cache_control: { type: "ephemeral" },
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
+        // Haiku has no server-side fallback.
+        ...(this.model.includes("haiku") ? {} : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
       },
       { signal: req.signal },
     );

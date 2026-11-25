@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#14181d">
+<title>Savi</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="stylesheet" href="/chat.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<section id="pair" hidden>
+  <h1>Pair this phone</h1>
+  <p>In VS Code, run <b>Savi: Pair Phone</b> and enter the code here.</p>
+  <form id="pairForm">
+    <input id="code" aria-label="Pairing code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12">
+    <button type="submit">Pair</button>
+  </form>
+  <p id="pairError" class="error" role="alert"></p>
+</section>
+<div id="app" hidden>
+  <header>
+    <nav>
+      <button type="button" data-tab="chat" aria-current="page">Chat</button>
+      <button type="button" data-tab="agenda">Agenda</button>
+      <button type="button" data-tab="history">History</button>
+    </nav>
+    <button type="button" id="newChat" class="secondary">New chat</button>
+  </header>
+  <p id="offline" role="status" hidden>Not connected. Check that NetBird is on and your PC is awake.</p>
+  <section id="chat" class="tab">
+    <main id="log" aria-live="polite"></main>
+    <form id="form">
+      <textarea id="input" rows="2" aria-label="Message Savi" placeholder="Type, or use the mic on your keyboard"></textarea>
+      <button id="button" type="submit">Send</button>
+    </form>
+  </section>
+  <section id="agenda" class="tab" hidden></section>
+  <section id="history" class="tab" hidden>
+    <input id="search" type="search" aria-label="Search history" placeholder="Search everything">
+    <div id="results"></div>
+  </section>
+</div>
+<script src="/app.js"></script>
+<script src="/chat.js"></script>
+</body>
+</html>

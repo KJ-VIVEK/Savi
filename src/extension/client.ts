@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
+import * as autostart from "./autostart.ts";
 import { dataDir, socketPath } from "../service/paths.ts";
 import { type Config, type Event, Lines, type Methods, type Reply } from "../service/protocol.ts";
 
@@ -43,7 +44,7 @@ export class Client {
       const socket = await dial().catch(() => undefined);
       if (!socket) {
         // Again after a while, in case an old service was still shutting down.
-        if (!spawned || attempt % 20 === 0) this.spawn();
+        if (!spawned || attempt % 20 === 0) await this.launch();
         spawned = true;
         await new Promise((r) => setTimeout(r, 150));
         continue;
@@ -62,6 +63,16 @@ export class Client {
       return socket;
     }
     throw new Error(`The Savi service did not start. See ${join(dataDir(), "service.log")}.`);
+  }
+
+  private async launch() {
+    if (autostart.isEnabled()) {
+      try {
+        await autostart.enable(this.options.script);
+        return void (await autostart.start());
+      } catch { /* run it ourselves */ }
+    }
+    this.spawn();
   }
 
   /** VS Code's own runtime as plain Node, detached so it outlives the window. */

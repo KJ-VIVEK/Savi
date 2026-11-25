@@ -12,16 +12,19 @@ import { GoogleAuth, NotConnectedError, parseClientFile } from "../providers/goo
 import { GoogleCalendar, GoogleTasks } from "../providers/google.ts";
 import { Keyring } from "../providers/keyring.ts";
 import { SqliteHistory } from "../providers/sqlite.ts";
+import { Awake } from "./awake.ts";
+import { Pairing } from "./pairing.ts";
 import { dataDir, socketPath } from "./paths.ts";
 import { type Config, type Event, Lines, type Methods, type Request } from "./protocol.ts";
 import { Savi } from "./savi.ts";
+import { addressOn, Web } from "./web.ts";
 
 declare const BUILD: string | undefined;
 const build = typeof BUILD === "string" ? BUILD : "dev";
 
 /** Models called with an API key. To add one: implement LLM, add a line here and to the setting's enum. */
 const apiProviders: Record<string, (key: string, model: string) => LLM> = {
-  anthropic: (key, model) => new AnthropicLLM(key, model || "claude-opus-5-5"),
+  anthropic: (key, model) => new AnthropicLLM(key, model || "claude-haiku-5-5"),
 };
 
 process.umask(0o077);
@@ -42,7 +45,7 @@ const auth = new GoogleAuth(secrets);
 const calendar = new GoogleCalendar(auth);
 const tasks = new GoogleTasks(auth);
 
-let config: Config = { provider: "claude-code", model: "", confirm: "modify", claudePath: "", ...JSON.parse(history.getSetting("config") ?? "{}") };
+let config: Config = { provider: "claude-code", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "wt0", stayAwake: true, ...JSON.parse(history.getSetting("config") ?? "{}") };
 const keyName = () => `llm.${config.provider}.key`;
 
 async function createAssistant(tools: Tool[], c: Config): Promise<Assistant> {
@@ -62,9 +65,30 @@ async function createAssistant(tools: Tool[], c: Config): Promise<Assistant> {
 
 const clients = new Set<Socket>();
 const write = (socket: Socket, message: unknown) => void (socket.writable && socket.write(`${JSON.stringify(message)}\n`));
-const emit = (e: Event) => { for (const c of clients) write(c, e); };
+const emit = (e: Event) => {
+  for (const c of clients) write(c, e);
+  web.emit(e);
+};
 
 const savi = new Savi({ history, calendar, tasks, config: () => config, createAssistant, emit });
+
+const pairing = new Pairing(history);
+const web = new Web({
+  dir, media: join(__dirname, "..", "media"), pairing, devices: history,
+  state: () => ({ event: "state", state: savi.state() }),
+  call: async (method, params) => {
+    if (!Object.hasOwn(phoneMethods, method)) throw new Error("Not available on the phone.");
+    return phoneMethods[method]!(params);
+  },
+});
+const updateWeb = () => web.update(config.phone ? addressOn(config.phoneInterface) : undefined);
+const awake = new Awake();
+/** Follows settings, the private network and the charger. */
+function tick() {
+  awake.update(config.stayAwake);
+  updateWeb().catch((e) => console.error("Phone access:", e));
+}
+
 let connecting: AbortController | undefined;
 
 type Handlers = { [M in keyof Methods]: (p: Parameters<Methods[M]>[0], socket: Socket) => ReturnType<Methods[M]> | Promise<ReturnType<Methods[M]>> };
@@ -72,6 +96,7 @@ const handlers: Handlers = {
   hello: ({ config: c }) => {
     config = { ...config, ...c };
     history.setSetting("config", JSON.stringify(config));
+    tick();
     return { build };
   },
   state: () => savi.state(),
@@ -116,7 +141,30 @@ const handlers: Handlers = {
   },
   hasApiKey: async () => (await secrets.get(keyName())) !== undefined,
   setApiKey: ({ key }) => (key ? secrets.store(keyName(), key) : secrets.delete(keyName())),
+  phonePair: async () => {
+    await updateWeb();
+    if (!web.ip) throw new Error(`No address on ${config.phoneInterface}. Is NetBird connected?`);
+    return { url: `${web.origin}/`, certificateUrl: web.certificateUrl, code: pairing.start() };
+  },
+  phoneDevices: () => history.devices(),
+  phoneRemove: ({ id }) => {
+    history.removeDevice(id);
+    web.drop(id);
+  },
   shutdown: () => void setTimeout(shutdown, 50),
+};
+
+/** All a phone can do: no settings, sign-in, pairing or deleting history. */
+const phoneMethods: Record<string, (p: any) => unknown> = {
+  send: ({ text }) => savi.send(String(text).slice(0, 20_000), "phone"),
+  stop: () => savi.stop(),
+  approve: ({ id, allow }) => savi.approve(String(id), allow === true),
+  newConversation: () => savi.open(undefined),
+  openConversation: ({ id }) => savi.open(Number(id)),
+  conversations: () => history.conversations(200),
+  search: ({ text }) => history.search({ text: String(text).slice(0, 500), limit: 50 }),
+  agenda: () => handlers.agenda({ days: 7 }, undefined as never),
+  completeTask: ({ id }) => savi.act("update_task", { id: String(id), completed: true }, "phone"),
 };
 
 const server = createServer((socket) => {
@@ -148,6 +196,8 @@ async function answer({ id, method, params }: Request, socket: Socket) {
 
 async function shutdown() {
   connecting?.abort();
+  web.close();
+  awake.release();
   server.close();
   await savi.stop();
   for (const c of clients) c.destroy();
@@ -161,5 +211,7 @@ setInterval(backup, 3_600_000).unref(); // does nothing if today's copy exists
 
 rmSync(socketPath(), { force: true }); // safe: we hold the lock
 server.listen(socketPath());
+tick();
+setInterval(tick, 20_000);
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);

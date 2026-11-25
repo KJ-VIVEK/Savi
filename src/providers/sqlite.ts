@@ -2,6 +2,7 @@ import { backup, DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Conversation, Found, History, Outcome, SearchQuery, StoredAction, StoredMessage } from "../core/history.ts";
+import type { Device, DeviceStore } from "../service/pairing.ts";
 import { toDate } from "../core/time.ts";
 
 const SCHEMA = `
@@ -33,21 +34,27 @@ CREATE TRIGGER action_removed AFTER DELETE ON action BEGIN
   DELETE FROM action_text WHERE rowid = old.id; END;
 PRAGMA user_version = 1;
 `;
+const DEVICES = `
+CREATE TABLE device (
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL, tokenHash TEXT NOT NULL UNIQUE, pairedAt TEXT NOT NULL, seenAt TEXT NOT NULL);
+PRAGMA user_version = 2;
+`;
 
 const KEEP_BACKUPS = 7;
 
 const clean = <T>(row: unknown) =>
   Object.fromEntries(Object.entries(row as object).map(([k, v]) => [k, v ?? (k === "conversationId" ? null : undefined)])) as T;
 
-export class SqliteHistory implements History {
+export class SqliteHistory implements History, DeviceStore {
   private db: DatabaseSync;
 
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA secure_delete = ON; PRAGMA recursive_triggers = ON");
     const { user_version: version } = this.one<{ user_version: number }>("PRAGMA user_version")!;
-    if (version === 0) this.db.exec(`BEGIN;${SCHEMA}COMMIT;`);
-    else if (version !== 1) throw new Error("The history was made by a newer version of Savi.");
+    if (version < 1) this.db.exec(`BEGIN;${SCHEMA}COMMIT;`);
+    if (version < 2) this.db.exec(`BEGIN;${DEVICES}COMMIT;`);
+    if (version > 2) throw new Error("The history was made by a newer version of Savi.");
   }
 
   close() { this.db.close(); }
@@ -56,6 +63,15 @@ export class SqliteHistory implements History {
   setSetting(name: string, value: string) {
     this.run("INSERT INTO setting VALUES (?, ?) ON CONFLICT (name) DO UPDATE SET value = excluded.value", name, value);
   }
+
+  devices() { return this.all<Device>("SELECT id, name, pairedAt, seenAt FROM device ORDER BY id"); }
+  addDevice(name: string, tokenHash: string) {
+    const now = new Date().toISOString();
+    return this.run("INSERT INTO device (name, tokenHash, pairedAt, seenAt) VALUES (?, ?, ?, ?)", name, tokenHash, now, now);
+  }
+  deviceByHash(tokenHash: string) { return this.one<{ id: number }>("SELECT id FROM device WHERE tokenHash = ?", tokenHash)?.id; }
+  seenDevice(id: number) { this.run("UPDATE device SET seenAt = ? WHERE id = ?", new Date().toISOString(), id); }
+  removeDevice(id: number) { this.run("DELETE FROM device WHERE id = ?", id); }
 
   current() {
     const id = Number(this.getSetting("conversation"));
