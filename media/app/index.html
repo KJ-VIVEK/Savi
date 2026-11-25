@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-<meta name="theme-color" content="#14181d">
+<meta name="theme-color" content="#171717">
 <title>Savi</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg">
@@ -24,26 +24,29 @@
   <header>
     <nav>
       <button type="button" data-tab="chat" aria-current="page">Chat</button>
-      <button type="button" data-tab="agenda">Agenda</button>
       <button type="button" data-tab="history">History</button>
     </nav>
     <button type="button" id="newChat" class="secondary">New chat</button>
   </header>
   <p id="offline" role="status" hidden>Not connected. Check that NetBird is on and your PC is awake.</p>
   <section id="chat" class="tab">
+    <div id="project" hidden><span></span><button type="button" class="secondary">Disconnect</button></div>
     <main id="log" aria-live="polite"></main>
-    <form id="form">
-      <textarea id="input" rows="2" aria-label="Message Savi" placeholder="Type, or use the mic on your keyboard"></textarea>
-      <button id="button" type="submit">Send</button>
-    </form>
+    <div class="dock">
+      <button type="button" id="jump" class="secondary" hidden>Latest</button>
+      <form id="form">
+        <textarea id="input" rows="1" aria-label="Message Savi" placeholder="Ask Savi anything"></textarea>
+        <button id="button" type="submit">Send</button>
+      </form>
+    </div>
   </section>
-  <section id="agenda" class="tab" hidden></section>
   <section id="history" class="tab" hidden>
     <input id="search" type="search" aria-label="Search history" placeholder="Search everything">
     <div id="results"></div>
   </section>
 </div>
 <script src="/app.js"></script>
+<script src="/markdown.js"></script>
 <script src="/chat.js"></script>
 </body>
 </html>

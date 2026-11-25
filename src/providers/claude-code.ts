@@ -1,4 +1,4 @@
-import { createSdkMcpServer, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, query, type SDKMessage, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { type AgentHooks, type Assistant, runTool, SYSTEM, type Turn, withNow } from "../core/agent.ts";
 import type { Tool } from "../core/tools.ts";
 
@@ -54,21 +54,7 @@ export class ClaudeCode implements Assistant {
           maxTurns: 12,
         },
       });
-      let wrote = false;
-      for await (const m of run) {
-        if (m.type === "stream_event") {
-          if (m.parent_tool_use_id !== null) continue;
-          if (m.event.type === "content_block_start" && m.event.content_block.type === "text") {
-            if (wrote) hooks.onText?.("\n\n"); // a new paragraph after a tool or search
-          } else if (m.event.type === "content_block_delta" && m.event.delta.type === "text_delta") {
-            wrote = true;
-            hooks.onText?.(m.event.delta.text);
-          }
-        } else if (m.type === "result") {
-          if (m.subtype !== "success") throw new Error(m.errors.join(" ") || `Claude Code stopped: ${m.subtype}`);
-          if (m.is_error) throw new Error(m.result);
-        }
-      }
+      await pump(run, hooks);
       signal?.throwIfAborted();
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -92,6 +78,28 @@ export class ClaudeCode implements Assistant {
       ),
     });
   }
+}
+
+/** Streams the reply to the hooks and returns the session ID. */
+export async function pump(run: AsyncIterable<SDKMessage>, hooks: Pick<AgentHooks, "onText">): Promise<string | undefined> {
+  let wrote = false;
+  let session: string | undefined;
+  for await (const m of run) {
+    if (m.type === "stream_event") {
+      if (m.parent_tool_use_id !== null) continue;
+      if (m.event.type === "content_block_start" && m.event.content_block.type === "text") {
+        if (wrote) hooks.onText?.("\n\n"); // a new paragraph after a tool or search
+      } else if (m.event.type === "content_block_delta" && m.event.delta.type === "text_delta") {
+        wrote = true;
+        hooks.onText?.(m.event.delta.text);
+      }
+    } else if (m.type === "result") {
+      session = m.session_id;
+      if (m.subtype !== "success") throw new Error(m.errors.join(" ") || `Claude Code stopped: ${m.subtype}`);
+      if (m.is_error) throw new Error(m.result);
+    }
+  }
+  return session;
 }
 
 /** JSON keeps past text from being mistaken for the tags around it. */

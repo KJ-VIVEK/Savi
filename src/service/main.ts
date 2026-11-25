@@ -1,16 +1,16 @@
 import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent, type Assistant } from "../core/agent.ts";
 import { createCodingTools } from "../core/coding.ts";
 import { createExpertTool } from "../core/expert.ts";
 import type { LLM } from "../core/llm.ts";
-import { addDays, parseLocal, toDate } from "../core/time.ts";
 import type { Tool } from "../core/tools.ts";
 import { AnthropicLLM } from "../providers/anthropic.ts";
+import { codeTurn } from "../providers/claude-coder.ts";
 import { ClaudeCode } from "../providers/claude-code.ts";
-import { GoogleAuth, NotConnectedError, parseClientFile } from "../providers/google-auth.ts";
+import { GoogleAuth, parseClientFile } from "../providers/google-auth.ts";
 import { GoogleCalendar, GoogleTasks } from "../providers/google.ts";
 import { Keyring } from "../providers/keyring.ts";
 import { RemoteControl } from "../providers/remote-control.ts";
@@ -19,7 +19,7 @@ import { Awake } from "./awake.ts";
 import { Pairing } from "./pairing.ts";
 import { dataDir, socketPath } from "./paths.ts";
 import { type Config, type Event, Lines, type Methods, type Request } from "./protocol.ts";
-import { Savi } from "./savi.ts";
+import { type Code, Savi } from "./savi.ts";
 import { addressOn, Web } from "./web.ts";
 
 declare const BUILD: string | undefined;
@@ -49,7 +49,7 @@ const calendar = new GoogleCalendar(auth);
 const tasks = new GoogleTasks(auth);
 
 let config: Config = { provider: "claude-code", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "wt0", stayAwake: true,
-  webSearch: true, expertModel: "", codeProjects: [], codeModel: "", ...JSON.parse(history.getSetting("config") ?? "{}") };
+  webSearch: true, expertModel: "", codeProjects: [], codeModel: "", codeInternet: [], ...JSON.parse(history.getSetting("config") ?? "{}") };
 const keyName = () => `llm.${config.provider}.key`;
 
 async function createAssistant(tools: Tool[], c: Config, model = c.model): Promise<Assistant> {
@@ -86,7 +86,22 @@ const extraTools = [
   ...createCodingTools(coding),
   createExpertTool(() => createAssistant([], config, expertModel())),
 ];
-const savi = new Savi({ extraTools, history, calendar, tasks, config: () => config, createAssistant, emit });
+const code: Code = async (project, text, session, hooks, signal) => {
+  const folder = config.codeProjects.find((f) => basename(f) === project);
+  if (!folder || !existsSync(folder)) throw new Error("The project folder was not found. Is its drive mounted?");
+  if (!config.claudePath || !existsSync(config.claudePath)) throw new Error("Claude Code was not found. Reload VS Code.");
+  const run = (from?: string) => codeTurn({
+    executable: config.claudePath, folder, model: config.codeModel || "sonnet", internet: config.codeInternet, hidden: [dir], session: from,
+  }, text, hooks, signal);
+  try {
+    return await run(session);
+  } catch (e) {
+    // Claude Code clears old sessions; the files are what matters.
+    if (session && e instanceof Error && /no conversation found/i.test(e.message)) return run();
+    throw e;
+  }
+};
+const savi = new Savi({ extraTools, store: history, projects: () => coding.projects(), code, history, calendar, tasks, config: () => config, createAssistant, emit });
 
 const pairing = new Pairing(history);
 const web = new Web({
@@ -118,27 +133,14 @@ const handlers: Handlers = {
   state: () => savi.state(),
   send: ({ text }) => savi.send(text, "vscode"),
   stop: () => savi.stop(),
-  approve: ({ id, allow }) => savi.approve(id, allow === true),
+  approve: ({ id, allow, all }) => savi.approve(id, allow === true, all === true),
+  disconnect: () => savi.disconnect(),
   newConversation: () => savi.open(undefined),
   openConversation: ({ id }) => savi.open(id),
   deleteConversation: ({ id }) => savi.remove(id),
   conversations: () => history.conversations(200),
   conversation: ({ id }) => ({ messages: history.messages(id, 10_000), actions: history.actions(id, 10_000) }),
   search: ({ text }) => history.search({ text, limit: 50 }),
-  agenda: async ({ days }) => {
-    if (!(await auth.isConnected())) return { connected: false, events: [], tasks: [] };
-    const today = toDate(new Date());
-    try {
-      const [events, open] = await Promise.all([
-        calendar.listEvents(parseLocal(today), parseLocal(addDays(today, days))),
-        tasks.listTasks(),
-      ]);
-      return { connected: true, events, tasks: open };
-    } catch (e) {
-      if (e instanceof NotConnectedError) return { connected: false, events: [], tasks: [] };
-      throw e;
-    }
-  },
   act: ({ tool, input }) => savi.act(tool, input, "vscode"),
   googleHasClient: () => auth.hasClient(),
   googleSetClient: ({ json }) => auth.setClient(parseClientFile(json)),
@@ -149,12 +151,9 @@ const handlers: Handlers = {
       async (url) => write(socket, { event: "openUrl", url } satisfies Event),
       AbortSignal.any([stop.signal, AbortSignal.timeout(5 * 60_000)]),
     );
-    emit({ event: "agenda" });
   },
   googleCancel: () => connecting?.abort(),
-  googleDisconnect: async () => {
-    try { await auth.disconnect(); } finally { emit({ event: "agenda" }); }
-  },
+  googleDisconnect: () => auth.disconnect(),
   hasApiKey: async () => (await secrets.get(keyName())) !== undefined,
   setApiKey: ({ key }) => (key ? secrets.store(keyName(), key) : secrets.delete(keyName())),
   phonePair: async () => {
@@ -174,13 +173,12 @@ const handlers: Handlers = {
 const phoneMethods: Record<string, (p: any) => unknown> = {
   send: ({ text }) => savi.send(String(text).slice(0, 20_000), "phone"),
   stop: () => savi.stop(),
-  approve: ({ id, allow }) => savi.approve(String(id), allow === true),
+  approve: ({ id, allow, all }) => savi.approve(String(id), allow === true, all === true),
+  disconnect: () => savi.disconnect(),
   newConversation: () => savi.open(undefined),
   openConversation: ({ id }) => savi.open(Number(id)),
   conversations: () => history.conversations(200),
   search: ({ text }) => history.search({ text: String(text).slice(0, 500), limit: 50 }),
-  agenda: () => handlers.agenda({ days: 7 }, undefined as never),
-  completeTask: ({ id }) => savi.act("update_task", { id: String(id), completed: true }, "phone"),
 };
 
 const server = createServer((socket) => {

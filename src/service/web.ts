@@ -16,6 +16,7 @@ const FILES: Record<string, [file: string, type: string]> = {
   "/": ["app/index.html", "text/html; charset=utf-8"],
   "/app.js": ["app/app.js", "text/javascript; charset=utf-8"],
   "/app.css": ["app/app.css", "text/css; charset=utf-8"],
+  "/markdown.js": ["markdown.js", "text/javascript; charset=utf-8"],
   "/chat.js": ["chat.js", "text/javascript; charset=utf-8"],
   "/chat.css": ["chat.css", "text/css; charset=utf-8"],
   "/icon.svg": ["app/icon.svg", "image/svg+xml"],
