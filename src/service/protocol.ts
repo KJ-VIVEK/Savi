@@ -12,6 +12,10 @@ export interface Config {
   /** Network interface the phone connects through. */
   phoneInterface: string;
   stayAwake: boolean;
+  webSearch: boolean;
+  expertModel: string;
+  codeProjects: string[];
+  codeModel: string;
 }
 
 export interface Approval { id: string; summary: string }

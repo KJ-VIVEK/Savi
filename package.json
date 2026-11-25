@@ -2,7 +2,7 @@
   "name": "savi",
   "displayName": "Savi",
   "description": "Personal assistant for your calendar and tasks",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "KJ-VIVEK",
   "private": true,
   "repository": {
@@ -269,6 +269,33 @@
           "default": true,
           "scope": "application",
           "description": "While Savi runs and the PC is plugged in, hold off automatic sleep. Sleeping by hand and closing the lid still work. Needs KDE."
+        },
+        "savi.webSearch": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Let chat search the web (Claude Code provider only)."
+        },
+        "savi.llm.expertModel": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Stronger model for hard questions. Empty uses the latest Sonnet."
+        },
+        "savi.code.projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Full paths of folders Savi may open for coding through Claude Code Remote Control."
+        },
+        "savi.code.model": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Model for coding sessions. Empty uses the latest Sonnet."
         }
       }
     }

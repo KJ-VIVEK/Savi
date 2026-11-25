@@ -3,6 +3,8 @@ import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Agent, type Assistant } from "../core/agent.ts";
+import { createCodingTools } from "../core/coding.ts";
+import { createExpertTool } from "../core/expert.ts";
 import type { LLM } from "../core/llm.ts";
 import { addDays, parseLocal, toDate } from "../core/time.ts";
 import type { Tool } from "../core/tools.ts";
@@ -11,6 +13,7 @@ import { ClaudeCode } from "../providers/claude-code.ts";
 import { GoogleAuth, NotConnectedError, parseClientFile } from "../providers/google-auth.ts";
 import { GoogleCalendar, GoogleTasks } from "../providers/google.ts";
 import { Keyring } from "../providers/keyring.ts";
+import { RemoteControl } from "../providers/remote-control.ts";
 import { SqliteHistory } from "../providers/sqlite.ts";
 import { Awake } from "./awake.ts";
 import { Pairing } from "./pairing.ts";
@@ -45,22 +48,23 @@ const auth = new GoogleAuth(secrets);
 const calendar = new GoogleCalendar(auth);
 const tasks = new GoogleTasks(auth);
 
-let config: Config = { provider: "claude-code", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "wt0", stayAwake: true, ...JSON.parse(history.getSetting("config") ?? "{}") };
+let config: Config = { provider: "claude-code", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "wt0", stayAwake: true,
+  webSearch: true, expertModel: "", codeProjects: [], codeModel: "", ...JSON.parse(history.getSetting("config") ?? "{}") };
 const keyName = () => `llm.${config.provider}.key`;
 
-async function createAssistant(tools: Tool[], c: Config): Promise<Assistant> {
+async function createAssistant(tools: Tool[], c: Config, model = c.model): Promise<Assistant> {
   if (c.provider === "claude-code") {
     if (!c.claudePath || !existsSync(c.claudePath))
       throw new Error("Claude Code was not found. Install and sign in to the Claude Code extension, then reload VS Code.");
     const cwd = join(dir, "work"); // empty, so no project files are in reach
     mkdirSync(cwd, { recursive: true });
-    return new ClaudeCode({ executable: c.claudePath, cwd, model: c.model }, tools);
+    return new ClaudeCode({ executable: c.claudePath, cwd, model, webSearch: c.webSearch }, tools);
   }
   const make = apiProviders[c.provider];
   if (!make) throw new Error("Unknown provider in savi.llm.provider.");
   const key = await secrets.get(keyName());
   if (!key) throw new Error("This provider needs an API key. Run 'Savi: Set Model API Key'.");
-  return new Agent(make(key, c.model), tools);
+  return new Agent(make(key, model), tools);
 }
 
 const clients = new Set<Socket>();
@@ -70,7 +74,19 @@ const emit = (e: Event) => {
   web.emit(e);
 };
 
-const savi = new Savi({ history, calendar, tasks, config: () => config, createAssistant, emit });
+const coding = new RemoteControl({
+  executable: () => {
+    if (!config.claudePath || !existsSync(config.claudePath)) throw new Error("Claude Code was not found. Reload VS Code.");
+    return config.claudePath;
+  },
+  folders: () => config.codeProjects, model: () => config.codeModel, dir,
+});
+const expertModel = () => config.expertModel || (config.provider === "anthropic" ? "claude-sonnet-5-5" : "sonnet");
+const extraTools = [
+  ...createCodingTools(coding),
+  createExpertTool(() => createAssistant([], config, expertModel())),
+];
+const savi = new Savi({ extraTools, history, calendar, tasks, config: () => config, createAssistant, emit });
 
 const pairing = new Pairing(history);
 const web = new Web({
@@ -200,6 +216,7 @@ async function shutdown() {
   awake.release();
   server.close();
   await savi.stop();
+  await coding.stopAll();
   for (const c of clients) c.destroy();
   history.close();
   process.exit(0);

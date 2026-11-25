@@ -34,7 +34,9 @@ export function activate(context: vscode.ExtensionContext) {
       provider: provider(), model: config().get("llm.model", ""),
       confirm: config().get<"all" | "modify">("confirm", "modify"), claudePath: findClaudeCode(),
       phone: config().get("phone.enabled", false), phoneInterface: config().get("phone.interface", "wt0"),
-      stayAwake: config().get("stayAwake", true),
+      stayAwake: config().get("stayAwake", true), webSearch: config().get("webSearch", true),
+      expertModel: config().get("llm.expertModel", ""),
+      codeProjects: config().get<string[]>("code.projects", []), codeModel: config().get("code.model", ""),
     }),
     onEvent: (e) => {
       if (e.event === "agenda") agenda.refresh();
