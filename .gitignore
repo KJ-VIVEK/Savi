@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.vsix
+.vscode-test/
+.env*
+# Google OAuth client files must never be committed
+client_secret*.json
+credentials*.json
