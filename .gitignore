@@ -14,3 +14,7 @@ oauth*.json
 *.db-*
 *.sqlite*
 *.log
+certificate.json
+*.key
+*.crt
+*.pem

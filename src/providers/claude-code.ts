@@ -3,6 +3,8 @@ import { type AgentHooks, type Assistant, runTool, SYSTEM, type Turn, withNow } 
 import type { Tool } from "../core/tools.ts";
 
 const SERVER = "savi";
+/** Light on plan limits, and as accurate as larger models on calendar requests. */
+const DEFAULT_MODEL = "haiku";
 const PREFIX = `mcp__${SERVER}__`;
 
 export interface ClaudeCodeOptions {
@@ -34,7 +36,7 @@ export class ClaudeCode implements Assistant {
         options: {
           pathToClaudeCodeExecutable: this.options.executable,
           cwd: this.options.cwd,
-          model: this.options.model || undefined,
+          model: this.options.model || DEFAULT_MODEL,
           env: subscriptionEnv(process.env),
           persistSession: false, // Savi keeps the record
           abortController,

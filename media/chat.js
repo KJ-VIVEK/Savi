@@ -1,4 +1,6 @@
-const vscode = acquireVsCodeApi();
+// Inside a function, so names do not clash with the phone app around it.
+(() => {
+const host = globalThis.saviHost ?? acquireVsCodeApi();
 const $ = (id) => document.getElementById(id);
 const log = $("log"), input = $("input"), button = $("button");
 const cards = new Map();
@@ -36,7 +38,7 @@ function approval({ id, summary }) {
     if (!allow) b.className = "secondary";
     b.onclick = () => {
       for (const x of row.children) x.disabled = true;
-      vscode.postMessage({ type: "approve", id, allow });
+      host.postMessage({ type: "approve", id, allow });
     };
     row.append(b);
   }
@@ -63,13 +65,13 @@ function showState(s) {
 
 $("form").addEventListener("submit", (e) => {
   e.preventDefault();
-  if (busy) return vscode.postMessage({ type: "stop" });
+  if (busy) return host.postMessage({ type: "stop" });
   const text = input.value.trim();
   if (!text) return;
   draft = text;
   input.value = "";
   setBusy(true);
-  vscode.postMessage({ type: "send", text });
+  host.postMessage({ type: "send", text });
 });
 
 input.addEventListener("keydown", (e) => {
@@ -79,7 +81,8 @@ input.addEventListener("keydown", (e) => {
   }
 });
 
-window.addEventListener("message", ({ data }) => {
+window.addEventListener("message", ({ data, source }) => {
+  if (globalThis.saviHost && source) return; // another window, not Savi
   switch (data.event) {
     case "state": showState(data.state); break;
     case "message":
@@ -105,4 +108,5 @@ window.addEventListener("message", ({ data }) => {
       break;
   }
 });
-vscode.postMessage({ type: "ready" });
+host.postMessage({ type: "ready" });
+})();

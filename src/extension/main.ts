@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import * as vscode from "vscode";
 import { type Kind, KINDS, PRIORITIES, type Priority } from "../core/calendar.ts";
 import { addDays, isDateOnly, isValidWhen, normalizeWhen, toDate, toLocal } from "../core/time.ts";
+import * as autostart from "./autostart.ts";
 import { Agenda, type Node } from "./agenda.ts";
 import { ChatView } from "./chat.ts";
 import { Client } from "./client.ts";
@@ -24,12 +25,16 @@ export function activate(context: vscode.ExtensionContext) {
   const provider = () => config().get("llm.provider", "claude-code");
   const report = (e: unknown) => void vscode.window.showErrorMessage(`Savi: ${e instanceof Error ? e.message : String(e)}`);
 
+  const script = vscode.Uri.joinPath(context.extensionUri, "dist", "service.cjs").fsPath;
+
   const client: Client = new Client({
-    script: vscode.Uri.joinPath(context.extensionUri, "dist", "service.cjs").fsPath,
+    script,
     build: BUILD,
     config: () => ({
       provider: provider(), model: config().get("llm.model", ""),
       confirm: config().get<"all" | "modify">("confirm", "modify"), claudePath: findClaudeCode(),
+      phone: config().get("phone.enabled", false), phoneInterface: config().get("phone.interface", "wt0"),
+      stayAwake: config().get("stayAwake", true),
     }),
     onEvent: (e) => {
       if (e.event === "agenda") agenda.refresh();
@@ -139,6 +144,44 @@ export function activate(context: vscode.ExtensionContext) {
     await (n.kind === "event" ? act("delete_event", { id: n.event.id }) : act("delete_task", { id: n.task.id }));
   };
 
+  const pairPhone = async () => {
+    if (!config().get("phone.enabled", false)) {
+      const ok = await vscode.window.showInformationMessage("Turn on phone access?", {
+        modal: true,
+        detail: "Savi will start when you log in and listen on your private network (NetBird) address. Only paired devices can use it.",
+      }, "Turn On");
+      if (!ok) return;
+      await autostart.enable(script);
+      await config().update("phone.enabled", true, vscode.ConfigurationTarget.Global);
+      await client.configure();
+    }
+    const { url, certificateUrl, code } = await client.call("phonePair", {});
+    await vscode.window.showInformationMessage(`Pairing code: ${code.slice(0, 4)} ${code.slice(4)}`, {
+      modal: true,
+      detail: `Valid for 10 minutes, for one device.\n\nOn your phone, with NetBird on:\n\nFirst time: open ${certificateUrl} and follow the steps there.\n\nAlready installed the certificate: open ${url}`,
+    });
+  };
+
+  const phoneDevices = async () => {
+    const devices = await client.call("phoneDevices", {});
+    if (!devices.length) return void vscode.window.showInformationMessage("No phones are paired.");
+    const when = (s: string) => new Date(s).toLocaleString();
+    const pick = await vscode.window.showQuickPick(
+      devices.map((d) => ({ label: `${d.name} ${d.id}`, description: `paired ${when(d.pairedAt)}, last used ${when(d.seenAt)}`, id: d.id })),
+      { title: "Paired devices: choose one to remove" },
+    );
+    if (!pick) return;
+    const ok = await vscode.window.showWarningMessage(`Remove ${pick.label}?`, { modal: true, detail: "It will need a new code to connect again." }, "Remove");
+    if (ok) await client.call("phoneRemove", { id: pick.id });
+  };
+
+  const phoneOff = async () => {
+    await config().update("phone.enabled", false, vscode.ConfigurationTarget.Global);
+    await client.configure();
+    await autostart.disable();
+    void vscode.window.showInformationMessage("Phone access is off, and Savi no longer starts at login.");
+  };
+
   const command = (id: string, run: (node: Node) => unknown) =>
     vscode.commands.registerCommand(`savi.${id}`, async (node: Node) => {
       try {
@@ -155,6 +198,9 @@ export function activate(context: vscode.ExtensionContext) {
     command("disconnectGoogle", () => client.call("googleDisconnect", {})),
     command("setApiKey", setApiKey),
     command("clearApiKey", () => client.call("setApiKey", { key: "" })),
+    command("pairPhone", pairPhone),
+    command("phoneDevices", phoneDevices),
+    command("phoneOff", phoneOff),
     command("history", () => showHistory(client, report)),
     command("openGuide", openGuide),
     command("addEvent", addEvent),

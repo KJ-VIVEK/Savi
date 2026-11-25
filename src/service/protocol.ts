@@ -1,5 +1,6 @@
 /** JSON, one message per line, over a Unix socket only this user can open. */
 import type { CalendarEvent, Task } from "../core/calendar.ts";
+import type { Device } from "./pairing.ts";
 import type { Conversation, Found, StoredAction, StoredMessage } from "../core/history.ts";
 
 export interface Config {
@@ -7,6 +8,10 @@ export interface Config {
   model: string;
   confirm: "all" | "modify";
   claudePath: string;
+  phone: boolean;
+  /** Network interface the phone connects through. */
+  phoneInterface: string;
+  stayAwake: boolean;
 }
 
 export interface Approval { id: string; summary: string }
@@ -45,6 +50,9 @@ export interface Methods {
   googleDisconnect(p: {}): void;
   hasApiKey(p: {}): boolean;
   setApiKey(p: { key: string }): void;
+  phonePair(p: {}): { url: string; certificateUrl: string; code: string };
+  phoneDevices(p: {}): Device[];
+  phoneRemove(p: { id: number }): void;
   shutdown(p: {}): void;
 }
 

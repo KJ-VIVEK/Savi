@@ -2,7 +2,7 @@
   "name": "savi",
   "displayName": "Savi",
   "description": "Personal assistant for your calendar and tasks",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "publisher": "KJ-VIVEK",
   "private": true,
   "repository": {
@@ -125,6 +125,21 @@
         "title": "History",
         "category": "Savi",
         "icon": "$(history)"
+      },
+      {
+        "command": "savi.pairPhone",
+        "title": "Pair Phone",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.phoneDevices",
+        "title": "Paired Devices",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.phoneOff",
+        "title": "Turn Off Phone Access",
+        "category": "Savi"
       }
     ],
     "menus": {
@@ -207,7 +222,7 @@
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "Model to use. Empty uses the provider's default."
+          "description": "Model to use. Empty uses Haiku. With Claude Code you can enter sonnet or opus; with the API, a full model ID such as claude-sonnet-5-5."
         },
         "savi.confirm": {
           "type": "string",
@@ -236,6 +251,24 @@
           "default": "",
           "scope": "machine",
           "description": "Claude Code executable. Empty uses the one in the Claude Code extension."
+        },
+        "savi.phone.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "Serve the phone app on the private network. Use the Pair Phone command to turn it on."
+        },
+        "savi.phone.interface": {
+          "type": "string",
+          "default": "wt0",
+          "scope": "machine",
+          "description": "Private network interface the phone connects through. wt0 is NetBird."
+        },
+        "savi.stayAwake": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "While Savi runs and the PC is plugged in, hold off automatic sleep. Sleeping by hand and closing the lid still work. Needs KDE."
         }
       }
     }
