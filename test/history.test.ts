@@ -67,7 +67,7 @@ function setup(send: Assistant["send"] | ((tools: Tool[]) => Assistant["send"]),
   const f = fakes(), events: any[] = [], history = new SqliteHistory(":memory:");
   const savi = new Savi({
     history, calendar: f.calendar, tasks: f.tasks, emit: (e) => events.push(e),
-    config: () => ({ provider: "x", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "", stayAwake: false }),
+    config: () => ({ provider: "x", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "", stayAwake: false, webSearch: false, expertModel: "", codeProjects: [], codeModel: "" }),
     createAssistant: async (tools) => ({ send: perTools ? (send as any)(tools) : send } as Assistant),
   });
   const until = async (name: string) => {
@@ -102,7 +102,7 @@ test("an approved change is logged and reaches the next turn", async () => {
   let seen: Turn | undefined;
   const next = new Savi({
     history: s.history, calendar: s.calendar, tasks: s.tasks, emit: () => {},
-    config: () => ({ provider: "x", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "", stayAwake: false }),
+    config: () => ({ provider: "x", model: "", confirm: "modify", claudePath: "", phone: false, phoneInterface: "", stayAwake: false, webSearch: false, expertModel: "", codeProjects: [], codeModel: "" }),
     createAssistant: async () => ({ send: async (t) => void (seen = t) }),
   });
   next.send("what did you do?", "vscode");

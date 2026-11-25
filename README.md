@@ -34,5 +34,5 @@ Principles:
 | **1. Calendar** (in progress) | Chat, agenda view, events, reminders, birthdays, tasks, priority colours |
 | **2. Memory** | Preferences and facts you can read, edit and delete |
 | **3. Proactive** | Morning briefing, reminders, conflict detection |
-| **4. More skills** | Email, notes, GitHub, home automation |
+| **4. More skills** | Web search and coding sessions (started), email, notes, GitHub, home automation |
 | **5. More interfaces** | Background service, CLI, voice |

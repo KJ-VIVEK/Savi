@@ -22,11 +22,11 @@ export class Savi {
   private run?: { stop: AbortController; done: Promise<void>; partial: string };
 
   constructor(deps: {
-    history: History; calendar: CalendarService; tasks: TaskService; config: () => Config;
+    extraTools?: Tool[]; history: History; calendar: CalendarService; tasks: TaskService; config: () => Config;
     createAssistant: (tools: Tool[], config: Config) => Promise<Assistant>; emit: (e: Event) => void;
   }) {
     this.history = deps.history;
-    this.tools = [...createTools(deps.calendar, deps.tasks), ...createHistoryTools(deps.history)];
+    this.tools = [...createTools(deps.calendar, deps.tasks), ...createHistoryTools(deps.history), ...(deps.extraTools ?? [])];
     this.createAssistant = deps.createAssistant;
     this.emit = deps.emit;
     this.config = deps.config;

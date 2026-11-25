@@ -3,7 +3,7 @@ import { type AgentHooks, type Assistant, runTool, SYSTEM, type Turn, withNow } 
 import type { Tool } from "../core/tools.ts";
 
 const SERVER = "savi";
-/** Light on plan limits, and as accurate as larger models on calendar requests. */
+/** Light on plan limits, and as accurate as larger models on calendar requests. Hard questions go to ask_expert. */
 const DEFAULT_MODEL = "haiku";
 const PREFIX = `mcp__${SERVER}__`;
 
@@ -13,6 +13,8 @@ export interface ClaudeCodeOptions {
   /** An otherwise empty working directory. */
   cwd: string;
   model?: string;
+  /** Lets Claude search the web. It still cannot open pages, files or a shell. */
+  webSearch?: boolean;
 }
 
 /** Runs the conversation in the installed Claude Code with only Savi's tools available. */
@@ -41,21 +43,27 @@ export class ClaudeCode implements Assistant {
           persistSession: false, // Savi keeps the record
           abortController,
           systemPrompt: SYSTEM,
-          tools: [], // no shell, files or web
+          tools: this.options.webSearch ? ["WebSearch"] : [], // never a shell or files
           settingSources: [],
           skills: [],
           strictMcpConfig: true,
           mcpServers: { [SERVER]: this.server(hooks, abortController.signal) },
-          allowedTools: this.tools.map((t) => PREFIX + t.spec.name),
+          allowedTools: [...this.tools.map((t) => PREFIX + t.spec.name), ...(this.options.webSearch ? ["WebSearch"] : [])],
           permissionMode: "dontAsk", // anything not listed above is denied
           includePartialMessages: true,
           maxTurns: 12,
         },
       });
+      let wrote = false;
       for await (const m of run) {
         if (m.type === "stream_event") {
-          if (m.parent_tool_use_id === null && m.event.type === "content_block_delta" && m.event.delta.type === "text_delta")
+          if (m.parent_tool_use_id !== null) continue;
+          if (m.event.type === "content_block_start" && m.event.content_block.type === "text") {
+            if (wrote) hooks.onText?.("\n\n"); // a new paragraph after a tool or search
+          } else if (m.event.type === "content_block_delta" && m.event.delta.type === "text_delta") {
+            wrote = true;
             hooks.onText?.(m.event.delta.text);
+          }
         } else if (m.type === "result") {
           if (m.subtype !== "success") throw new Error(m.errors.join(" ") || `Claude Code stopped: ${m.subtype}`);
           if (m.is_error) throw new Error(m.result);
