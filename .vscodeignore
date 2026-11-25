@@ -1,0 +1,7 @@
+**
+!dist/extension.cjs
+!dist/service.cjs
+!media/**
+!docs/google-setup.md
+!package.json
+!README.md
