@@ -31,7 +31,7 @@ Principles:
 
 | Milestone | Scope |
 | --- | --- |
-| **1. Calendar** (in progress) | Chat, agenda view, events, all-day events, recurring events, tasks |
+| **1. Calendar** (in progress) | Chat, agenda view, events, reminders, birthdays, tasks, priority colours |
 | **2. Memory** | Preferences and facts you can read, edit and delete |
 | **3. Proactive** | Morning briefing, reminders, conflict detection |
 | **4. More skills** | Email, notes, GitHub, home automation |

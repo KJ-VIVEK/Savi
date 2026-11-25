@@ -6,3 +6,11 @@ dist/
 # Google OAuth client files must never be committed
 client_secret*.json
 credentials*.json
+oauth*.json
+*token*.json
+
+# Private data never belongs here
+*.db
+*.db-*
+*.sqlite*
+*.log

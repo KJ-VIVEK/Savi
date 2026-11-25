@@ -1,0 +1,264 @@
+{
+  "name": "savi",
+  "displayName": "Savi",
+  "description": "Personal assistant for your calendar and tasks",
+  "version": "0.1.0",
+  "publisher": "KJ-VIVEK",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KJ-VIVEK/Savi.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.cjs",
+  "type": "module",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "savi",
+          "title": "Savi",
+          "icon": "media/savi.svg"
+        }
+      ]
+    },
+    "views": {
+      "savi": [
+        {
+          "id": "savi.chat",
+          "name": "Chat",
+          "type": "webview"
+        },
+        {
+          "id": "savi.agenda",
+          "name": "Agenda"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "savi.agenda",
+        "when": "!savi.signedIn",
+        "contents": "Connect Google to see your calendar and tasks.\n[Connect Google](command:savi.connectGoogle)\n[Setup guide](command:savi.openGuide)"
+      },
+      {
+        "view": "savi.agenda",
+        "when": "savi.signedIn",
+        "contents": "Nothing coming up."
+      }
+    ],
+    "commands": [
+      {
+        "command": "savi.connectGoogle",
+        "title": "Connect Google",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.disconnectGoogle",
+        "title": "Disconnect Google",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.setApiKey",
+        "title": "Set Model API Key",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.clearApiKey",
+        "title": "Remove Model API Key",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.openGuide",
+        "title": "Open Google Setup Guide",
+        "category": "Savi"
+      },
+      {
+        "command": "savi.addEvent",
+        "title": "Add Event, Reminder or Birthday",
+        "category": "Savi",
+        "icon": "$(add)"
+      },
+      {
+        "command": "savi.addTask",
+        "title": "Add Task",
+        "category": "Savi",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "savi.refresh",
+        "title": "Refresh Agenda",
+        "category": "Savi",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "savi.newChat",
+        "title": "New Chat",
+        "category": "Savi",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "savi.completeTask",
+        "title": "Complete Task",
+        "icon": "$(check)"
+      },
+      {
+        "command": "savi.openItem",
+        "title": "Open in Google Calendar",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "savi.deleteItem",
+        "title": "Delete"
+      },
+      {
+        "command": "savi.history",
+        "title": "History",
+        "category": "Savi",
+        "icon": "$(history)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "savi.addEvent",
+          "when": "view == savi.agenda",
+          "group": "navigation@1"
+        },
+        {
+          "command": "savi.addTask",
+          "when": "view == savi.agenda",
+          "group": "navigation@2"
+        },
+        {
+          "command": "savi.refresh",
+          "when": "view == savi.agenda",
+          "group": "navigation@3"
+        },
+        {
+          "command": "savi.newChat",
+          "when": "view == savi.chat",
+          "group": "navigation"
+        },
+        {
+          "command": "savi.history",
+          "when": "view == savi.chat",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "savi.completeTask",
+          "when": "viewItem == task",
+          "group": "inline"
+        },
+        {
+          "command": "savi.openItem",
+          "when": "viewItem == event",
+          "group": "inline"
+        },
+        {
+          "command": "savi.deleteItem",
+          "when": "viewItem == event || viewItem == task"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "savi.completeTask",
+          "when": "false"
+        },
+        {
+          "command": "savi.openItem",
+          "when": "false"
+        },
+        {
+          "command": "savi.deleteItem",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Savi",
+      "properties": {
+        "savi.llm.provider": {
+          "type": "string",
+          "enum": [
+            "claude-code",
+            "anthropic"
+          ],
+          "default": "claude-code",
+          "scope": "application",
+          "description": "What runs chat.",
+          "enumDescriptions": [
+            "Your installed Claude Code and its sign-in. No API key.",
+            "Claude API with an API key, billed separately."
+          ]
+        },
+        "savi.llm.model": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Model to use. Empty uses the provider's default."
+        },
+        "savi.confirm": {
+          "type": "string",
+          "enum": [
+            "all",
+            "modify"
+          ],
+          "default": "modify",
+          "scope": "application",
+          "enumDescriptions": [
+            "Confirm creating, changing and deleting.",
+            "Confirm changing and deleting; create without asking."
+          ],
+          "description": "Which assistant actions need confirmation."
+        },
+        "savi.agendaDays": {
+          "type": "integer",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 60,
+          "scope": "application",
+          "description": "Days shown in the agenda."
+        },
+        "savi.claudeCode.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Claude Code executable. Empty uses the one in the Claude Code extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "vscode:prepublish": "npm run check && npm run build",
+    "package": "vsce package --no-dependencies --out savi.vsix"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.332",
+    "@anthropic-ai/sdk": "1.14.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.7",
+    "@types/vscode": "1.100.0",
+    "@vscode/vsce": "4.1.1",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
