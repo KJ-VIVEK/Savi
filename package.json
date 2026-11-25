@@ -2,7 +2,7 @@
   "name": "savi",
   "displayName": "Savi",
   "description": "Personal assistant for your calendar and tasks",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "KJ-VIVEK",
   "private": true,
   "repository": {
