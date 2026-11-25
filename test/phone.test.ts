@@ -42,7 +42,7 @@ test("the web server only serves paired devices from its own origin", async () =
   const dir = temp(), store = new SqliteHistory(":memory:"), pairing = new Pairing(store), called: string[] = [];
   const web = new Web({
     dir, media: "media", pairing, devices: store, ports: { https: 18787, http: 18788 },
-    state: () => ({ event: "agenda" }),
+    state: () => ({ event: "project" }),
     call: async (m) => { called.push(m); return "ok"; },
   });
   await web.update("127.0.0.1");
@@ -64,7 +64,7 @@ test("the web server only serves paired devices from its own origin", async () =
   const origin = { origin: web.origin };
   try {
     assert.equal((await ask("GET", "/")).status, 200); // TLS verified against our CA
-    for (const f of ["/app.js", "/chat.js", "/app.css", "/chat.css", "/icon.svg", "/manifest.webmanifest"]) assert.equal((await ask("GET", f)).status, 200, f);
+    for (const f of ["/app.js", "/chat.js", "/markdown.js", "/app.css", "/chat.css", "/icon.svg", "/manifest.webmanifest"]) assert.equal((await ask("GET", f)).status, 200, f);
     assert.equal((await ask("GET", "/../package.json")).status, 401);
     assert.equal((await ask("GET", "/", { host: "evil.example" })).status, 421);
     assert.equal((await ask("GET", "/events")).status, 401);
@@ -81,7 +81,7 @@ test("the web server only serves paired devices from its own origin", async () =
     assert.equal((await ask("POST", "/call", { cookie }, { method: "send" })).status, 403, "no origin");
     assert.equal((await ask("POST", "/call", { ...origin, cookie }, { method: "send" })).text, '{"result":"ok"}');
     assert.equal((await ask("POST", "/call", { ...origin, cookie }, "x".repeat(70_000))).status, 400);
-    assert.match((await ask("GET", "/events", { cookie })).text, /agenda/);
+    assert.match((await ask("GET", "/events", { cookie })).text, /project/);
     store.removeDevice(store.devices()[0]!.id);
     assert.equal((await ask("POST", "/call", { ...origin, cookie }, { method: "send" })).status, 401);
     assert.deepEqual(called, ["send"]);

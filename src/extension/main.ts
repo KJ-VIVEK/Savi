@@ -3,7 +3,6 @@ import * as vscode from "vscode";
 import { type Kind, KINDS, PRIORITIES, type Priority } from "../core/calendar.ts";
 import { addDays, isDateOnly, isValidWhen, normalizeWhen, toDate, toLocal } from "../core/time.ts";
 import * as autostart from "./autostart.ts";
-import { Agenda, type Node } from "./agenda.ts";
 import { ChatView } from "./chat.ts";
 import { Client } from "./client.ts";
 import { showHistory } from "./history.ts";
@@ -37,18 +36,16 @@ export function activate(context: vscode.ExtensionContext) {
       stayAwake: config().get("stayAwake", true), webSearch: config().get("webSearch", true),
       expertModel: config().get("llm.expertModel", ""),
       codeProjects: config().get<string[]>("code.projects", []), codeModel: config().get("code.model", ""),
+      codeInternet: config().get<string[]>("code.internet", []),
     }),
     onEvent: (e) => {
-      if (e.event === "agenda") agenda.refresh();
-      else if (e.event === "openUrl") void vscode.env.openExternal(vscode.Uri.parse(e.url));
+      if (e.event === "openUrl") void vscode.env.openExternal(vscode.Uri.parse(e.url));
       else chat.post(e);
     },
     onOpen: () => {
       void chat.sync();
-      agenda.refresh();
     },
   });
-  const agenda: Agenda = new Agenda(client);
   const chat: ChatView = new ChatView(context.extensionUri, client);
 
   const setApiKey = async () => {
@@ -139,13 +136,6 @@ export function activate(context: vscode.ExtensionContext) {
     await act("create_task", { title: title.trim(), priority: priority.value, due: due.trim() || undefined });
   };
 
-  const deleteItem = async (n: Node) => {
-    if (n.kind === "group") return;
-    const detail = n.kind === "event" ? n.event.title : n.task.title;
-    if ((await vscode.window.showWarningMessage("Delete this?", { modal: true, detail }, "Delete")) !== "Delete") return;
-    await (n.kind === "event" ? act("delete_event", { id: n.event.id }) : act("delete_task", { id: n.task.id }));
-  };
-
   const pairPhone = async () => {
     if (!config().get("phone.enabled", false)) {
       const ok = await vscode.window.showInformationMessage("Turn on phone access?", {
@@ -184,10 +174,10 @@ export function activate(context: vscode.ExtensionContext) {
     void vscode.window.showInformationMessage("Phone access is off, and Savi no longer starts at login.");
   };
 
-  const command = (id: string, run: (node: Node) => unknown) =>
-    vscode.commands.registerCommand(`savi.${id}`, async (node: Node) => {
+  const command = (id: string, run: () => unknown) =>
+    vscode.commands.registerCommand(`savi.${id}`, async () => {
       try {
-        await run(node);
+        await run();
       } catch (e) {
         report(e);
       }
@@ -195,11 +185,11 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider("savi.chat", chat, { webviewOptions: { retainContextWhenHidden: true } }),
-    vscode.window.registerTreeDataProvider("savi.agenda", agenda),
     command("connectGoogle", connectGoogle),
     command("disconnectGoogle", () => client.call("googleDisconnect", {})),
     command("setApiKey", setApiKey),
     command("clearApiKey", () => client.call("setApiKey", { key: "" })),
+    command("openChat", () => chat.openTab()),
     command("pairPhone", pairPhone),
     command("phoneDevices", phoneDevices),
     command("phoneOff", phoneOff),
@@ -207,18 +197,9 @@ export function activate(context: vscode.ExtensionContext) {
     command("openGuide", openGuide),
     command("addEvent", addEvent),
     command("addTask", addTask),
-    command("refresh", () => agenda.refresh()),
     command("newChat", () => client.call("newConversation", {})),
-    command("completeTask", async (n) => {
-      if (n.kind === "task") await act("update_task", { id: n.task.id, completed: true });
-    }),
-    command("openItem", (n) => {
-      if (n.kind === "event" && n.event.url) return vscode.env.openExternal(vscode.Uri.parse(n.event.url));
-    }),
-    command("deleteItem", deleteItem),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("savi")) void client.configure().catch(report);
-      if (e.affectsConfiguration("savi.agendaDays")) agenda.refresh();
     }),
     // Claude Code's folder changes when it updates.
     vscode.extensions.onDidChange(() => void client.configure().catch(report)),

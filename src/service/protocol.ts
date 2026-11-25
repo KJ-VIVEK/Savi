@@ -1,5 +1,4 @@
 /** JSON, one message per line, over a Unix socket only this user can open. */
-import type { CalendarEvent, Task } from "../core/calendar.ts";
 import type { Device } from "./pairing.ts";
 import type { Conversation, Found, StoredAction, StoredMessage } from "../core/history.ts";
 
@@ -16,9 +15,10 @@ export interface Config {
   expertModel: string;
   codeProjects: string[];
   codeModel: string;
+  codeInternet: string[];
 }
 
-export interface Approval { id: string; summary: string }
+export interface Approval { id: string; summary: string; all?: string }
 
 export interface State {
   conversation?: number;
@@ -28,23 +28,23 @@ export interface State {
   /** Text of the reply being written. */
   partial: string;
   approvals: Approval[];
+  /** The connected project. */
+  project?: string;
 }
-
-export interface Agenda { connected: boolean; events: CalendarEvent[]; tasks: Task[] }
 
 export interface Methods {
   hello(p: { config: Config }): { build: string };
   state(p: {}): State;
   send(p: { text: string }): void;
   stop(p: {}): void;
-  approve(p: { id: string; allow: boolean }): void;
+  approve(p: { id: string; allow: boolean; all?: boolean }): void;
+  disconnect(p: {}): void;
   newConversation(p: {}): void;
   openConversation(p: { id: number }): void;
   deleteConversation(p: { id: number }): void;
   conversations(p: {}): Conversation[];
   conversation(p: { id: number }): { messages: StoredMessage[]; actions: StoredAction[] };
   search(p: { text: string }): Found[];
-  agenda(p: { days: number }): Agenda;
   /** Runs a tool the user invoked directly; it is logged but not asked about again. */
   act(p: { tool: string; input: unknown }): void;
   googleHasClient(p: {}): boolean;
@@ -68,7 +68,7 @@ export type Event =
   | { event: "approval"; approval: Approval }
   | { event: "approved"; id: string }
   | { event: "done"; problem?: string }
-  | { event: "agenda" }
+  | { event: "project"; project?: string }
   /** Sent only to the client that asked to connect. */
   | { event: "openUrl"; url: string };
 

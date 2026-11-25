@@ -40,7 +40,6 @@ async function start() {
   events.onmessage = (m) => {
     const data = JSON.parse(m.data);
     deliver(data);
-    if (data.event === "agenda" && !el("agenda").hidden) void loadAgenda();
   };
 }
 
@@ -68,7 +67,6 @@ function tab(name) {
     if (b.dataset.tab === name) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   }
-  if (name === "agenda") void loadAgenda();
   if (name === "history") void loadHistory();
 }
 for (const b of document.querySelectorAll("[data-tab]")) b.onclick = () => tab(b.dataset.tab);
@@ -87,57 +85,12 @@ function node(tag, className, text) {
   if (text !== undefined) n.textContent = text; // never HTML
   return n;
 }
-function row(tag, title, detail, priority) {
+function row(tag, title, detail) {
   const r = node(tag, "row");
-  if (priority !== undefined) {
-    const dot = node("i", `dot ${priority ?? ""}`);
-    if (priority) { dot.role = "img"; dot.ariaLabel = `${priority} priority`; }
-    r.append(dot);
-  }
   const text = node("span", "", title);
   if (detail) text.append(node("small", "", detail));
   r.append(text);
   return r;
-}
-
-const clock = (s) => new Date(s).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-const day = (s) => new Date(`${s.slice(0, 10)}T00:00:00`).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
-
-async function loadAgenda() {
-  const out = el("agenda");
-  try {
-    const { connected, events: list, tasks } = await call("agenda");
-    const rows = [];
-    if (!connected) rows.push(node("p", "", "Google is not connected. Connect it in VS Code."));
-    let last;
-    for (const e of list) {
-      if (day(e.start) !== last) rows.push(node("h2", "", (last = day(e.start))));
-      const kind = e.kind === "event" ? "" : `${e.kind[0].toUpperCase()}${e.kind.slice(1)}, `;
-      rows.push(row("div", e.title, kind + (e.start.length === 10 ? "All day" : `${clock(e.start)} to ${clock(e.end)}`), e.priority ?? ""));
-    }
-    if (tasks.length) rows.push(node("h2", "", "Tasks"));
-    for (const t of tasks) {
-      const r = row("div", t.title, t.due ? `Due ${day(t.due)}` : "", t.priority ?? "");
-      const done = node("button", "secondary", "Done");
-      done.type = "button";
-      done.onclick = async () => {
-        done.disabled = true;
-        try {
-          await call("completeTask", { id: t.id });
-          r.remove();
-        } catch (e) {
-          done.disabled = false;
-          r.append(node("small", "error", e.message));
-        }
-      };
-      r.append(done);
-      rows.push(r);
-    }
-    if (!rows.length) rows.push(node("p", "", "Nothing in the next 7 days."));
-    out.replaceChildren(...rows);
-  } catch (e) {
-    out.replaceChildren(node("p", "error", e.message));
-  }
 }
 
 let search = 0, timer;

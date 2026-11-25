@@ -2,7 +2,7 @@
   "name": "savi",
   "displayName": "Savi",
   "description": "Personal assistant for your calendar and tasks",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "publisher": "KJ-VIVEK",
   "private": true,
   "repository": {
@@ -37,25 +37,9 @@
           "id": "savi.chat",
           "name": "Chat",
           "type": "webview"
-        },
-        {
-          "id": "savi.agenda",
-          "name": "Agenda"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "savi.agenda",
-        "when": "!savi.signedIn",
-        "contents": "Connect Google to see your calendar and tasks.\n[Connect Google](command:savi.connectGoogle)\n[Setup guide](command:savi.openGuide)"
-      },
-      {
-        "view": "savi.agenda",
-        "when": "savi.signedIn",
-        "contents": "Nothing coming up."
-      }
-    ],
     "commands": [
       {
         "command": "savi.connectGoogle",
@@ -95,30 +79,10 @@
         "icon": "$(checklist)"
       },
       {
-        "command": "savi.refresh",
-        "title": "Refresh Agenda",
-        "category": "Savi",
-        "icon": "$(refresh)"
-      },
-      {
         "command": "savi.newChat",
         "title": "New Chat",
         "category": "Savi",
         "icon": "$(clear-all)"
-      },
-      {
-        "command": "savi.completeTask",
-        "title": "Complete Task",
-        "icon": "$(check)"
-      },
-      {
-        "command": "savi.openItem",
-        "title": "Open in Google Calendar",
-        "icon": "$(link-external)"
-      },
-      {
-        "command": "savi.deleteItem",
-        "title": "Delete"
       },
       {
         "command": "savi.history",
@@ -140,25 +104,16 @@
         "command": "savi.phoneOff",
         "title": "Turn Off Phone Access",
         "category": "Savi"
+      },
+      {
+        "command": "savi.openChat",
+        "title": "Open Chat in Editor",
+        "category": "Savi",
+        "icon": "$(link-external)"
       }
     ],
     "menus": {
       "view/title": [
-        {
-          "command": "savi.addEvent",
-          "when": "view == savi.agenda",
-          "group": "navigation@1"
-        },
-        {
-          "command": "savi.addTask",
-          "when": "view == savi.agenda",
-          "group": "navigation@2"
-        },
-        {
-          "command": "savi.refresh",
-          "when": "view == savi.agenda",
-          "group": "navigation@3"
-        },
         {
           "command": "savi.newChat",
           "when": "view == savi.chat",
@@ -168,36 +123,11 @@
           "command": "savi.history",
           "when": "view == savi.chat",
           "group": "navigation"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "savi.completeTask",
-          "when": "viewItem == task",
-          "group": "inline"
         },
         {
-          "command": "savi.openItem",
-          "when": "viewItem == event",
-          "group": "inline"
-        },
-        {
-          "command": "savi.deleteItem",
-          "when": "viewItem == event || viewItem == task"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "savi.completeTask",
-          "when": "false"
-        },
-        {
-          "command": "savi.openItem",
-          "when": "false"
-        },
-        {
-          "command": "savi.deleteItem",
-          "when": "false"
+          "command": "savi.openChat",
+          "when": "view == savi.chat",
+          "group": "navigation"
         }
       ]
     },
@@ -237,14 +167,6 @@
             "Confirm changing and deleting; create without asking."
           ],
           "description": "Which assistant actions need confirmation."
-        },
-        "savi.agendaDays": {
-          "type": "integer",
-          "default": 7,
-          "minimum": 1,
-          "maximum": 60,
-          "scope": "application",
-          "description": "Days shown in the agenda."
         },
         "savi.claudeCode.path": {
           "type": "string",
@@ -289,13 +211,22 @@
           },
           "default": [],
           "scope": "machine",
-          "description": "Full paths of folders Savi may open for coding through Claude Code Remote Control."
+          "description": "Full paths of folders Savi may connect to for coding."
         },
         "savi.code.model": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Model for coding sessions. Empty uses the latest Sonnet."
+          "description": "Model for coding. Empty uses the latest Sonnet."
+        },
+        "savi.code.internet": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Hosts that commands in a connected project may reach, such as registry.npmjs.org. Empty means no internet."
         }
       }
     }

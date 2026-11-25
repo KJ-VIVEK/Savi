@@ -24,7 +24,7 @@ export function createCodingTools(coding: Coding): Tool[] {
     tool({
       name: "start_coding",
       description:
-        "Open a coding session on one project, which the user then drives from the Code tab of the Claude app. Use it only when the user asks to code or develop. You cannot write code in it yourself: give the user the link, or tell them to open the Code tab.",
+        "Open a Claude Code Remote Control session on one project, which the user then drives from the Code tab of the Claude app. Use it only when the user mentions the Claude app or Remote Control by name; otherwise use connect_project. You cannot write code in it yourself: give the user the link, or tell them to open the Code tab.",
       effect: "modify", // always asks: the session can run commands on this PC
       schema: z.strictObject({ project }),
       describe: ({ project: p }) => `Start a coding session on "${p}"\nIt can edit files and run commands on this PC, asking you in the Claude app first.`,

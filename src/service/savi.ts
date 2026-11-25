@@ -4,29 +4,44 @@ import type { CalendarService, TaskService } from "../core/calendar.ts";
 import type { History, Source, StoredAction } from "../core/history.ts";
 import { createHistoryTools } from "../core/history-tools.ts";
 import { toLocal } from "../core/time.ts";
+import { createProjectTools } from "../core/project.ts";
 import { createTools, type Tool } from "../core/tools.ts";
 import type { Approval, Config, Event, State } from "./protocol.ts";
 
+const LEAVE = /^\s*(please\s+)?(disconnect|leave|exit)(\s+(from\s+)?(the\s+|this\s+)?(project|[\w.-]+))?[\s.!]*$/i;
 const APPROVAL_TIMEOUT = 9 * 60_000; // shorter than the tool timeout, so a late click cannot act
 const CONTEXT_MESSAGES = 30;
 const CONTEXT_CHARS = 16_000;
+
+/** Runs a coding turn in a project; returns the session to continue from. */
+export type Code = (project: string, text: string, session: string | undefined, hooks: AgentHooks, signal: AbortSignal) => Promise<string | undefined>;
+
+interface Linked { conversation: number; name: string; session?: string }
 
 /** One conversation shared by every client. */
 export class Savi {
   private history: History;
   private tools: Tool[];
+  private projects: () => string[];
+  private code: Code;
+  private store: { getSetting(n: string): string | undefined; setSetting(n: string, v: string): void };
+  private handOver?: string;
   private createAssistant: (tools: Tool[], config: Config) => Promise<Assistant>;
   private emit: (e: Event) => void;
   private config: () => Config;
-  private approvals = new Map<string, Approval & { settle: (allow: boolean) => void }>();
+  private approvals = new Map<string, Approval & { settle: (allow: boolean | "all") => void }>();
   private run?: { stop: AbortController; done: Promise<void>; partial: string };
 
   constructor(deps: {
-    extraTools?: Tool[]; history: History; calendar: CalendarService; tasks: TaskService; config: () => Config;
+    extraTools?: Tool[]; history: History; store: Savi["store"]; projects: () => string[]; code: Code; calendar: CalendarService; tasks: TaskService; config: () => Config;
     createAssistant: (tools: Tool[], config: Config) => Promise<Assistant>; emit: (e: Event) => void;
   }) {
     this.history = deps.history;
-    this.tools = [...createTools(deps.calendar, deps.tasks), ...createHistoryTools(deps.history), ...(deps.extraTools ?? [])];
+    this.store = deps.store;
+    this.projects = deps.projects;
+    this.code = deps.code;
+    this.tools = [...createTools(deps.calendar, deps.tasks), ...createHistoryTools(deps.history), ...(deps.extraTools ?? []),
+      ...createProjectTools({ projects: deps.projects, connect: (name, request) => this.connect(name, request) })];
     this.createAssistant = deps.createAssistant;
     this.emit = deps.emit;
     this.config = deps.config;
@@ -40,7 +55,8 @@ export class Savi {
       actions: conversation ? this.history.actions(conversation, 200) : [],
       busy: this.run !== undefined,
       partial: this.run?.partial ?? "",
-      approvals: [...this.approvals.values()].map(({ id, summary }) => ({ id, summary })),
+      approvals: [...this.approvals.values()].map(({ id, summary, all }) => ({ id, summary, all })),
+      project: this.linked(conversation)?.name,
     };
   }
 
@@ -70,7 +86,40 @@ export class Savi {
     await run.done;
   }
 
-  approve(id: string, allow: boolean) { this.approvals.get(id)?.settle(allow); }
+  approve(id: string, allow: boolean, all = false) {
+    const a = this.approvals.get(id);
+    a?.settle(allow && all && a.all ? "all" : allow);
+  }
+
+  async disconnect() {
+    await this.stop();
+    this.unlink();
+  }
+
+  private unlink() {
+    this.store.setSetting("project", "");
+    this.emit({ event: "project" });
+  }
+
+  /** The project joined to this conversation, if it is still listed. */
+  private linked(conversation: number | undefined): Linked | undefined {
+    const raw = this.store.getSetting("project");
+    if (!raw || conversation === undefined) return undefined;
+    const l = JSON.parse(raw) as Linked;
+    return l.conversation === conversation && this.projects().includes(l.name) ? l : undefined;
+  }
+
+  private link(l: Linked) { this.store.setSetting("project", JSON.stringify(l)); }
+
+  private connect(name: string, request?: string) {
+    const conversation = this.history.current();
+    const project = this.projects().find((p) => p.toLowerCase() === name.toLowerCase());
+    if (conversation === undefined || !project)
+      throw new Error(`"${name}" is not a listed project. Add its folder to savi.code.projects in VS Code settings.`);
+    this.link({ conversation, name: project });
+    this.handOver = request?.trim() || undefined;
+    this.emit({ event: "project", project });
+  }
 
   async open(id: number | undefined) {
     await this.stop();
@@ -96,8 +145,7 @@ export class Savi {
   private async reply(run: NonNullable<Savi["run"]>, turn: Turn, conversationId: number, source: Source) {
     let problem: string | undefined;
     try {
-      const assistant = await this.createAssistant(this.tools, this.config());
-      await assistant.send(turn, {
+      const hooks: AgentHooks = {
         ...this.recorder(conversationId, source),
         onText: (delta) => {
           run.partial += delta;
@@ -108,8 +156,26 @@ export class Savi {
           this.emit({ event: "tool", name });
         },
         needsApproval: (effect) => effect === "modify" || (effect === "create" && this.config().confirm === "all"),
-        approve: (summary) => this.ask(summary, run.stop.signal),
-      }, run.stop.signal);
+        approve: (summary, all) => this.ask(summary, run.stop.signal, all),
+      };
+      let request: string | undefined = turn.text;
+      if (!this.linked(conversationId)) {
+        this.handOver = undefined;
+        const assistant = await this.createAssistant(this.tools, this.config());
+        await assistant.send(turn, hooks, run.stop.signal);
+        request = this.handOver;
+        this.handOver = undefined;
+        if (request && run.partial) hooks.onText!("\n\n");
+      } else if (LEAVE.test(turn.text)) {
+        this.unlink();
+        hooks.onText!("Disconnected from the project.");
+        request = undefined;
+      }
+      const project = this.linked(conversationId);
+      if (project && request) {
+        const session = await this.code(project.name, request, project.session, hooks, run.stop.signal);
+        if (this.linked(conversationId)?.name === project.name) this.link({ ...project, session });
+      }
     } catch (e) {
       problem = run.stop.signal.aborted ? "Stopped." : e instanceof Error ? e.message : String(e);
     }
@@ -123,25 +189,24 @@ export class Savi {
     this.emit({ event: "done", problem });
   }
 
-  private ask(summary: string, signal: AbortSignal) {
+  private ask(summary: string, signal: AbortSignal, all?: string) {
     if (signal.aborted) return Promise.resolve(false);
     const id = randomUUID();
-    return new Promise<boolean>((resolve) => {
-      const settle = (allow: boolean) => {
+    return new Promise<boolean | "all">((resolve) => {
+      const settle = (allow: boolean | "all") => {
         clearTimeout(timer);
         if (!this.approvals.delete(id)) return; // the first answer counts
         this.emit({ event: "approved", id });
         resolve(allow);
       };
       const timer = setTimeout(() => settle(false), APPROVAL_TIMEOUT);
-      this.approvals.set(id, { id, summary, settle });
-      this.emit({ event: "approval", approval: { id, summary } });
+      this.approvals.set(id, { id, summary, all, settle });
+      this.emit({ event: "approval", approval: { id, summary, all } });
     });
   }
 
-  private recorder(conversationId: number | null, source: Source): Pick<AgentHooks, "onChange" | "record"> {
+  private recorder(conversationId: number | null, source: Source): Pick<AgentHooks, "record"> {
     return {
-      onChange: () => this.emit({ event: "agenda" }),
       record: (tool, summary) => {
         const { id } = this.history.addAction({ conversationId, source, tool, summary });
         return (outcome, result) => this.history.finishAction(id, outcome, result);
